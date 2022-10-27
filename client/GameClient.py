@@ -62,6 +62,9 @@ def main(argv):
         else:
             print("1002 Authentication failed")
             
+    # In the Game Hall
+    
+            
 if __name__ == "__main__":
 	if len(sys.argv) != 3:
 		print("Input Wrong! \n Input format: python GameClient.py <hostname/IP adress of the server> <Server port>\n Eg:Python3 GameClient.py localhost 22222")
