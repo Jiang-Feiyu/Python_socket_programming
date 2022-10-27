@@ -22,7 +22,7 @@ def msg_receive(connSocket):
 		print("Server has disconnected unexpectedly")
 		connSocket.close()
 		sys.exit(1)
-  
+
 def authentication(connSocket):
     # Get input for username and password
     name = input("Please input your user name:")
@@ -63,6 +63,17 @@ def main(argv):
             print("1002 Authentication failed")
             
     # In the Game Hall
+    game_status = 0
+    while game_status == 0:
+        command = input()
+        msg_send(my_socket, command)
+        msg_rcv = msg_receive(my_socket)  
+        if msg_rcv == "4001 Bye bye":
+            print("4001 Bye bye")
+            game_status = 1
+            break
+        print(msg_rcv)    
+    print("Client ends")
     
             
 if __name__ == "__main__":

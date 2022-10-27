@@ -112,7 +112,8 @@ class ServerThread(threading.Thread):
         else:
             self.msg_send("1002 Authentication failed")
             print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has failed to authenticate")
-			        
+	
+        
     def run(self):
         #login
         pathToUserInfo = self.pathToUserInfo
@@ -130,25 +131,45 @@ class ServerThread(threading.Thread):
                 if (self.authentication(username, password, pathToUserInfo) == 1):
                     authentication_status = 1
         client_state = 1001
-
         #In the game hall
         while client_state != 4001:
-            client_command = self.msg_receive()
-            try:
-                command, room_number = client_command.split(" ")
-                room_number = int(room_number)
-            except ValueError:
-                self.msg_send("4002 Unrecognized message")
-            # try:
-			# 		command, room_number = client_command.split(" ")
-			# 		room_number = int(room_number)
-			# 	except ValueError: #Room number is not an integer OR command is "/enter(any spaces)" only
-			# 		self.msg_send("4002 Unrecognized message")
-			# 		continue;
-					
-			# 	if(room_number < 1 or room_number > number_of_room): #Room number out of range
-			# 		self.msg_send("4002 Unrecognized message")
-			# 		continue;
+
+            client_command = self.msg_receive() # recieve the command from client
+            print(client_command)
+            # 2-1 list command
+            if client_command == "/list":
+                self.acquire_lock("NUM")
+                #Assemble the message
+                message = "3001 " + str(number_of_room)
+                for i in number_of_player_in_room:
+                    message = message + " " + str(i)
+                self.msg_send(message)
+                self.release_lock("NUM")
+            # 2-2 enter the room
+            elif client_command[0:6] == "/enter":
+                # acquire which room player want to login
+                try:
+                    command, room_num = client_command.split(" ")
+                    room_num = int(room_num)
+                    if(room_num < 1 or room_num > number_of_room): #Room number out of range
+                        self.msg_send("4002 Unrecognized message")
+                except ValueError: #Room number is not an integer OR command is "/enter(any spaces)" only
+                    self.msg_send("4002 Unrecognized messag")
+                # check whether the room is empty
+                
+                
+                
+                
+            # 4 Exit from the System
+            elif client_command == "/exit":
+                client_state = 4001
+                self.msg_send("4001 Bye bye")
+                print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has disconnected")
+                self.connSocket.close()
+            # 5 incorrect message format
+            else:
+                self.msg_send("4002 Unrecognized message")  
+            
 
 def main(argv):
 	#check whether the port number is an int and in the right range
