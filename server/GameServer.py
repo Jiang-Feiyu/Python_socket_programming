@@ -24,6 +24,8 @@ for i in range(0, number_of_room): #initialize all the arrays
 	result.append("null")
  
 class ServerThread(threading.Thread):
+    room_number = 0
+     
     def __init__(self, client, pathToUserInfo):
         threading.Thread.__init__(self)
         self.client = client
@@ -102,18 +104,86 @@ class ServerThread(threading.Thread):
                 if user_auth_to_compare == line.strip(): #Matching line
                     match = 1
                     authentication_status = 1
-                    break
+                    self.msg_send("1001 Authentication successful")
+                    return 1
             userInfoFile.close()
             match = 1
         
-        if authentication_status == 1:
-            self.msg_send("1001 Authentication successful")
-            return 1
-        else:
-            self.msg_send("1002 Authentication failed")
-            print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has failed to authenticate")
-	
+        self.msg_send("1002 Authentication failed")
+        print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has failed to authenticate")
+        return 0
+	            
+    def enter(self, client_comment):
+        # check if its a blank command
+        if client_comment.strip() == "/enter":
+            self.msg_send("4002 Unrecognized message")
+            return 4002
+        # check whether the room exists
+        try:
+            num = int(client_comment.split()[1])
+            if (num < 1) or  (num > 10):
+                print("NUM: ", num)
+                self.msg_send("4002 Unrecognized message")
+                return 4002
+        except ValueError:
+            self.msg_send("4002 Unrecognized message")
+            return 4002
+        # check whether there are people in the room player chose
+        self.acquire_lock("NUM")
+        self.room_number = num
+        match number_of_player_in_room[num-1]:
+            case 0 | 1: # this means the room is avaliable
+                number_of_player_in_room[num-1] += 1
+                self.release_lock("NUM")
+                print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has enter room " + str(num-1))
+                if  number_of_player_in_room[num-1] == 1:
+                    self.msg_send("3011 Wait")
+                while number_of_player_in_room[num-1] == 1: # if there is only one person in the room, he need to wait another player orn quit the room
+                    try:
+                        self.connSocket.send(b"")
+                        time.sleep(0.1)
+                    except ConnectionResetError: #player himself has disconnected
+                        print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has disconnected unexpectedly while waiting for another player to enter")
+                        self.connSocket.close()
+                        self.clear_room(num) #one player only, safe to run
+                        self.waiting = 0
+                        sys.exit(1)
+                self.msg_send("3012 Game started. Please guess true or false")
+                return 3012
+            case 2:
+                print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" failed to enter room " + str(num - 1) + " because it is full")
+                self.msg_send("3013 The room is full")
+                self.release_lock("NUM")
+                return 3013
+            case _:
+                self.msg_send("4002 Unrecognized message")
+                return 4002
+    
+    def guess(self, client_commend,room_number):
+        # handle the situation whith wrong command
+        # check if its a blank command
+        if client_commend.strip() == "/guess":
+            self.msg_send("4002 Unrecognized message")
+            return 4002
+        # check if its a boolean value
+        try:
+            guess = client_commend.split()[1]
+            if guess == "true":
+                guess = True
+            elif guess == "false":
+                guess = False
+            else:
+                self.msg_send("4002 Unrecognized message")
+                return 4002
+        except ValueError:
+            self.msg_send("4002 Unrecognized message")
+            return 4002
         
+        self.acquire_lock("RES")
+        result[room_number-1] = bool(random.getrandbits(1)) #generate result
+        responses[room_number-1][player] = guess #store player's guess into array
+        self.release_lock("RES")
+            
     def run(self):
         #login
         pathToUserInfo = self.pathToUserInfo
@@ -133,83 +203,71 @@ class ServerThread(threading.Thread):
         client_state = 1001
         #In the game hall
         while client_state != 4001:
-
             client_command = self.msg_receive() # recieve the command from client
             print(client_command)
-            # 2-1 list command
-            if client_command == "/list":
-                self.acquire_lock("NUM")
-                #Assemble the message
-                message = "3001 " + str(number_of_room)
-                for i in number_of_player_in_room:
-                    message = message + " " + str(i)
-                self.msg_send(message)
-                self.release_lock("NUM")
-            # 2-2 enter the room
-            elif client_command[0:6] == "/enter":
-                # acquire which room player want to login
-                try:
-                    command, room_num = client_command.split(" ")
-                    room_num = int(room_num)
-                    if(room_num < 1 or room_num > number_of_room): #Room number out of range
-                        self.msg_send("4002 Unrecognized message")
-                except ValueError: #Room number is not an integer OR command is "/enter(any spaces)" only
-                    self.msg_send("4002 Unrecognized messag")
-                # check whether the room is empty
-                
-                
-                
-                
-            # 4 Exit from the System
-            elif client_command == "/exit":
-                client_state = 4001
-                self.msg_send("4001 Bye bye")
-                print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has disconnected")
-                self.connSocket.close()
-            # 5 incorrect message format
-            else:
-                self.msg_send("4002 Unrecognized message")  
-            
+            command = client_command.split()[0]
+            match command:
+                # 2-1 list command
+                case "/list":
+                    self.acquire_lock("NUM")
+                    #Assemble the message
+                    message = "3001 " + str(number_of_room)
+                    for i in number_of_player_in_room:
+                        message = message + " " + str(i)
+                    self.msg_send(message)
+                    self.release_lock("NUM")
+                # 2-2 enter the game hall
+                case "/enter":
+                    client_state = self.enter(client_command)
+                # 3 play the game
+                case "/guess":
+                    client_state = self.guess(client_command, self.room_number)
+                # 4 Exit from the System
+                case "/exit":
+                    client_state = 4001
+                    self.msg_send("4001 Bye bye")
+                    print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has disconnected")
+                    self.connSocket.close()
+                # 5 incorrect message format
+                case _:
+                    self.msg_send("4002 Unrecognized message")
 
-def main(argv):
-	#check whether the port number is an int and in the right range
-    if (argv[1].isdigit() == True):
-        serverPort = int(argv[1])
-        if (serverPort < 0 or serverPort > 65535):
-            print("Error: The server port number is not within 0 and 65535")
-            sys.exit(1)
-    else:
-        print("Error: The server port number is not an integer")
+# main function:
+print("Please input in this format: \n python3 GameServer.py <listening port> <path to UserInfo.txt>")
+print("example: python3 GameServer.py 1001 UserInfo.txt")
+if len(sys.argv) != 3:
+    print("Error, please input arguments again!")
+    sys.exit(1)
+    
+#check whether the port number is an int and in the right range
+if (sys.argv[1].isdigit() == True):
+    serverPort = int(sys.argv[1])
+    if (serverPort < 0 or serverPort > 65535):
+        print("Error: The server port number is not within 0 and 65535")
         sys.exit(1)
+else:
+    print("Error: The server port number is not an integer")
+    sys.exit(1)
 	
-    #check whether the Userinfo.txt exists, I assume it's in the same folder with GameServer.py
-    file = argv[2]
-    if os.path.exists(file):
-        sz = os.path.getsize(file)
-        # check whether the database is empty
-        if not sz:
-            print(file, " is empty!")
-        else:
-            print("Successfully connect to database!")
+#check whether the Userinfo.txt exists, I assume it's in the same folder with GameServer.py
+file = sys.argv[2]
+if os.path.exists(file):
+    sz = os.path.getsize(file)
+    # check whether the database is empty
+    if not sz:
+        print(file, " is empty!")
     else:
-        print("Error: \"" + argv[2] + "\" does not exist")
+        print("Successfully connect to database!")
+else:
+    print("Error: \"" + sys.argv[2] + "\" does not exist")
 
-    serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    serverSocket.bind( ("", serverPort) )
-    serverSocket.listen(5)
-    print("The server is ready to receive  (Press control/command + C to kill the process)")
+serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+serverSocket.bind( ("", serverPort) )
+serverSocket.listen(5)
+print("The server is ready to receive  (Press control/command + C to kill the process)")
     
-    #accept client and create a thread for that socket
-    while True:
-        client = serverSocket.accept()
-        newthd = ServerThread(client, argv[2])
-        newthd.start()
-    
-if __name__ == '__main__':
-    print("Please input in this format: \n python3 GameServer.py <listening port> <path to UserInfo.txt>")
-    print("example: python3 GameServer.py 1001 UserInfo.txt")
-    if len(sys.argv) != 3:
-        print("Error, please input arguments again!")
-        sys.exit(1)
-    
-    main(sys.argv)
+#accept client and create a thread for that socket
+while True:
+    client = serverSocket.accept()
+    newthd = ServerThread(client, sys.argv[2])
+    newthd.start()

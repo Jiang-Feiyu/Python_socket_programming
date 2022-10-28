@@ -72,7 +72,12 @@ def main(argv):
             print("4001 Bye bye")
             game_status = 1
             break
-        print(msg_rcv)    
+        elif msg_rcv == "3011 Wait":
+            print("3011 Wait")
+            msg_rcv = msg_receive(my_socket)
+            print(msg_rcv)
+        else:
+            print(msg_rcv)    
     print("Client ends")
     
             
