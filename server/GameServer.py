@@ -13,18 +13,18 @@ number_of_room = 10
 number_of_player_in_room = [] #Global variable: array[number_of_room] containing the number of players in room
 
 response_lock = threading.Lock() #mutex lock for modifying responses 2D array
-responses = [] #Global variable: 2D array[number_of_room][2] containing the response from client
+responses = [[],[],[],[],[],[],[],[],[],[]] #Global variable: 1D containing the response from client
 result = [] #Global variable: array[number_of_room] containing the random result generated
 
 judging_lock = threading.Lock() #mutex lock for judging who is the winner
 
 for i in range(0, number_of_room): #initialize all the arrays
 	number_of_player_in_room.append(0)
-	responses.append(["waiting","waiting"])
 	result.append("null")
  
 class ServerThread(threading.Thread):
     room_number = 0
+    count = 0
      
     def __init__(self, client, pathToUserInfo):
         threading.Thread.__init__(self)
@@ -75,11 +75,9 @@ class ServerThread(threading.Thread):
         print("Thread: Room " + str(room_number-1) + " begin clean up")
         self.acquire_lock("NUM")
         number_of_player_in_room[room_number-1] = 0
-        self.release_lock("NUM")
-        
+        self.release_lock("NUM")      
         self.acquire_lock("RES")
-        responses[room_number-1][0] = "waiting"
-        responses[room_number-1][1] = "waiting"
+        responses[room_number-1] = []
         result[room_number-1] = "null"
         self.release_lock("RES")
         print("Thread: Room " + str(room_number-1) + " finish clean up")
@@ -159,7 +157,7 @@ class ServerThread(threading.Thread):
                 self.msg_send("4002 Unrecognized message")
                 return 4002
     
-    def guess(self, client_commend,room_number):
+    def guess(self, client_commend,room_number,player_name):
         # handle the situation whith wrong command
         # check if its a blank command
         if client_commend.strip() == "/guess":
@@ -179,11 +177,52 @@ class ServerThread(threading.Thread):
             self.msg_send("4002 Unrecognized message")
             return 4002
         
+        first_player = ''
+        
+        if len(responses[room_number-1]) == 1:
+            first_player = player_name
+        print("first_player1", first_player)
         self.acquire_lock("RES")
         result[room_number-1] = bool(random.getrandbits(1)) #generate result
-        responses[room_number-1][player] = guess #store player's guess into array
+        print("responses: ", responses)
+        print("responses[room_number-1]: ", responses[room_number-1])
+        responses[room_number-1].append([player_name, guess]) #store player's guess into array
         self.release_lock("RES")
-            
+        print("responses[room_number-1]: ", responses[room_number-1])
+        # when there is only one person submit the result, then need to wait another to submit
+        # only the later come one should clear the room after judge
+        
+        # Playing the game
+        self.acquire_lock("RES")
+        win = bool(random.getrandbits(1)) #generate result
+        if win == 1:
+            win = True
+        else:
+            win = False
+        self.release_lock("RES")
+        
+        print("responses[room_number-1]",responses[room_number-1])
+        print("win",win)
+        # self.acquire_lock("JUD")
+        print("responses[room_number-1][0][1]: ",responses[room_number-1][0][1])
+        print("responses[room_number-1][1][1]: ",responses[room_number-1][1][1])
+        if responses[room_number-1][0][1] == responses[room_number-1][1][1]:
+            # self.clear_room(room_number) #safe to run coz one thread only
+            print("3023 The result is a tie")
+            self.msg_send("3023 The result is a tie")
+        else:
+            if responses[room_number-1][0][0] == player_name:
+                if responses[room_number-1][0][1] == win:
+                    self.msg_send("3021 You are the winner")
+                else:
+                    self.msg_send("3022 You lost this game")
+            else:
+                if responses[room_number-1][1][1] == win:
+                    self.msg_send("3021 You are the winner")
+                else:
+                    self.msg_send("3022 You lost this game")
+        # self.release_lock("JUD")   
+        
     def run(self):
         #login
         pathToUserInfo = self.pathToUserInfo
@@ -205,7 +244,11 @@ class ServerThread(threading.Thread):
         while client_state != 4001:
             client_command = self.msg_receive() # recieve the command from client
             print(client_command)
-            command = client_command.split()[0]
+            try:
+                command = client_command.split()[0]
+            except ValueError:
+                self.msg_send("4002 Unrecognized message")
+                sys.exit(1)
             match command:
                 # 2-1 list command
                 case "/list":
@@ -221,7 +264,7 @@ class ServerThread(threading.Thread):
                     client_state = self.enter(client_command)
                 # 3 play the game
                 case "/guess":
-                    client_state = self.guess(client_command, self.room_number)
+                    client_state = self.guess(client_command, self.room_number,self.username)
                 # 4 Exit from the System
                 case "/exit":
                     client_state = 4001
