@@ -177,20 +177,21 @@ class ServerThread(threading.Thread):
             self.msg_send("4002 Unrecognized message")
             return 4002
         
-        first_player = ''
+        responses[room_number-1].append([player_name, guess])
         
+        first_player = ''
         if len(responses[room_number-1]) == 1:
             first_player = player_name
         print("first_player1", first_player)
-        self.acquire_lock("RES")
-        result[room_number-1] = bool(random.getrandbits(1)) #generate result
-        print("responses: ", responses)
-        print("responses[room_number-1]: ", responses[room_number-1])
-        responses[room_number-1].append([player_name, guess]) #store player's guess into array
-        self.release_lock("RES")
-        print("responses[room_number-1]: ", responses[room_number-1])
-        # when there is only one person submit the result, then need to wait another to submit
-        # only the later come one should clear the room after judge
+        
+        while len(responses[room_number-1]) == 1: # if there is only one person in the room, he need to wait another player orn quit the room
+            try:
+                self.connSocket.send(b"")
+                time.sleep(0.1)
+            except ConnectionResetError: #player himself has disconnected
+                self.connSocket.close()
+                self.waiting = 0
+                sys.exit(1)
         
         # Playing the game
         self.acquire_lock("RES")
@@ -221,6 +222,9 @@ class ServerThread(threading.Thread):
                     self.msg_send("3021 You are the winner")
                 else:
                     self.msg_send("3022 You lost this game")
+                    
+        if player_name == first_player:
+            self.clear_room(room_number) 
         # self.release_lock("JUD")   
         
     def run(self):
