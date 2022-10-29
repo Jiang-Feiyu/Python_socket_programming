@@ -56,9 +56,6 @@ class ServerThread(threading.Thread):
         elif type == "RES":
             response_lock.acquire()
             print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has acquired RES lock")
-        elif type == "JUD":
-            judging_lock.acquire()
-            print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has acquired JUD lock")
 
     def release_lock(self, type): #for acquiring the mutex lock, and displaying log in server
         if type == "NUM":
@@ -67,9 +64,6 @@ class ServerThread(threading.Thread):
         elif type == "RES":
             response_lock.release()
             print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has released RES lock")
-        elif type == "JUD":
-            judging_lock.release()
-            print("Thread: User \"" + self.username + "\" with IP \"" + self.connAddr[0] + "\" has released JUD lock")
             
     def clear_room(self, room_number): #for reseting both arrays for use of next clients, only applicable when both threads has disconnected unexpectedly
         print("Thread: Room " + str(room_number-1) + " begin clean up")
@@ -200,32 +194,39 @@ class ServerThread(threading.Thread):
             win = True
         else:
             win = False
-        self.release_lock("RES")
         
+        responses[room_number-1].append(win)
         print("responses[room_number-1]",responses[room_number-1])
         print("win",win)
-        # self.acquire_lock("JUD")
+        self.release_lock("RES")
+
+
         print("responses[room_number-1][0][1]: ",responses[room_number-1][0][1])
         print("responses[room_number-1][1][1]: ",responses[room_number-1][1][1])
+        print("responses[room_number-1][-1]: ",responses[room_number-1][-1])
+        
         if responses[room_number-1][0][1] == responses[room_number-1][1][1]:
             # self.clear_room(room_number) #safe to run coz one thread only
             print("3023 The result is a tie")
             self.msg_send("3023 The result is a tie")
         else:
             if responses[room_number-1][0][0] == player_name:
-                if responses[room_number-1][0][1] == win:
+                if responses[room_number-1][0][1] == responses[room_number-1][-1]:
+                    print("a")
                     self.msg_send("3021 You are the winner")
                 else:
+                    print("b")
                     self.msg_send("3022 You lost this game")
             else:
-                if responses[room_number-1][1][1] == win:
+                if responses[room_number-1][1][1] == responses[room_number-1][-1]:
+                    print("c")
                     self.msg_send("3021 You are the winner")
                 else:
+                    print("d")
                     self.msg_send("3022 You lost this game")
                     
         if player_name == first_player:
             self.clear_room(room_number) 
-        # self.release_lock("JUD")   
         
     def run(self):
         #login
