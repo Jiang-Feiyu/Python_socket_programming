@@ -195,7 +195,8 @@ class ServerThread(threading.Thread):
         else:
             win = False
         
-        responses[room_number-1].append(win)
+        if player_name != first_player:
+            responses[room_number-1].append(win)
         self.release_lock("RES")
 
 
@@ -207,6 +208,8 @@ class ServerThread(threading.Thread):
             self.msg_send("3023 The result is a tie")
         else:
             if responses[room_number-1][0][0] == player_name:
+                print("responses[room_number-1][0][1] == responses[room_number-1][-1]")
+                print(responses[room_number-1][0][1],  responses[room_number-1][-1])
                 if responses[room_number-1][0][1] == responses[room_number-1][-1]:
                     print("a")
                     self.msg_send("3021 You are the winner")
@@ -214,6 +217,8 @@ class ServerThread(threading.Thread):
                     print("b")
                     self.msg_send("3022 You lost this game")
             else:
+                print("responses[room_number-1][0][1] == responses[room_number-1][-1]")
+                print(responses[room_number-1][0][1],  responses[room_number-1][-1])
                 if responses[room_number-1][1][1] == responses[room_number-1][-1]:
                     print("c")
                     self.msg_send("3021 You are the winner")
