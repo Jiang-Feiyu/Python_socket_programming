@@ -196,14 +196,10 @@ class ServerThread(threading.Thread):
             win = False
         
         responses[room_number-1].append(win)
-        print("responses[room_number-1]",responses[room_number-1])
-        print("win",win)
         self.release_lock("RES")
 
 
-        print("responses[room_number-1][0][1]: ",responses[room_number-1][0][1])
-        print("responses[room_number-1][1][1]: ",responses[room_number-1][1][1])
-        print("responses[room_number-1][-1]: ",responses[room_number-1][-1])
+        print("responses[room_number-1]: ",responses[room_number-1])
         
         if responses[room_number-1][0][1] == responses[room_number-1][1][1]:
             # self.clear_room(room_number) #safe to run coz one thread only
@@ -227,6 +223,10 @@ class ServerThread(threading.Thread):
                     
         if player_name == first_player:
             self.clear_room(room_number) 
+        
+        self.room_number = 0
+        print("room_number",self.room_number)    
+        print("end_room: ", responses[room_number-1])
         
     def run(self):
         #login
@@ -269,7 +269,10 @@ class ServerThread(threading.Thread):
                     client_state = self.enter(client_command)
                 # 3 play the game
                 case "/guess":
-                    client_state = self.guess(client_command, self.room_number,self.username)
+                    if self.room_number > 0:
+                        client_state = self.guess(client_command, self.room_number,self.username)
+                    else:
+                        self.msg_send("4002 Unrecognized message")
                 # 4 Exit from the System
                 case "/exit":
                     client_state = 4001
