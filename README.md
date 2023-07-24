@@ -1,5 +1,4 @@
 Name: Jiang Feiyu
-UID: 3035770800
 
 1.1 A sample username and password database is stored in UserInfo.txt.
     Start statement (sample).
